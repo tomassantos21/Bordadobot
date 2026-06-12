@@ -128,7 +128,7 @@ export default function Create() {
                   <label className="flex flex-col items-center justify-center border-2 border-dashed border-primary/30 rounded-2xl cursor-pointer hover:border-primary/60 hover:bg-accent/20 transition-all duration-300 min-h-[400px] group">
                     <input
                       type="file"
-                      accept="image/*"
+                      accept="image/png, image/jpeg"
                       onChange={handleImageUpload}
                       className="hidden"
                     />
