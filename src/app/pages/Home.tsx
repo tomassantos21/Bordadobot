@@ -29,18 +29,18 @@ export default function Home() {
           </p>
 
           <div className="flex flex-col sm:flex-row gap-4 sm:gap-6 justify-center px-2">
-            <Link to="/create" className="w-full sm:w-auto">
-              <Button size="lg" className="gap-2 px-8 sm:px-10 py-5 sm:py-6 text-base sm:text-lg w-full sm:w-auto">
+            <Button size="lg" className="gap-2 px-8 sm:px-10 py-5 sm:py-6 text-base sm:text-lg w-full sm:w-auto" asChild>
+              <Link to="/create">
                 Start Creating
                 <ArrowRight className="w-5 h-5 sm:w-6 sm:h-6" />
-              </Button>
-            </Link>
-            <Link to="/gallery" className="w-full sm:w-auto">
-              <Button size="lg" variant="outline" className="gap-2 px-8 sm:px-10 py-5 sm:py-6 text-base sm:text-lg w-full sm:w-auto">
+              </Link>
+            </Button>
+            <Button size="lg" variant="outline" className="gap-2 px-8 sm:px-10 py-5 sm:py-6 text-base sm:text-lg w-full sm:w-auto" asChild>
+              <Link to="/gallery">
                 <Palette className="w-5 h-5 sm:w-6 sm:h-6" />
                 View Gallery
-              </Button>
-            </Link>
+              </Link>
+            </Button>
           </div>
 
           {/* Scroll Indicator */}
@@ -152,12 +152,12 @@ export default function Home() {
             Join our community of artists and craft enthusiasts exploring the
             intersection of tradition and technology
           </p>
-          <Link to="/create" className="inline-block w-full sm:w-auto">
-            <Button size="lg" className="gap-2 px-8 sm:px-10 py-5 sm:py-6 text-base sm:text-lg w-full sm:w-auto">
+          <Button size="lg" className="gap-2 px-8 sm:px-10 py-5 sm:py-6 text-base sm:text-lg w-full sm:w-auto" asChild>
+            <Link to="/create">
               Get Started Free
               <Sparkles className="w-5 h-5 sm:w-6 sm:h-6" />
-            </Button>
-          </Link>
+            </Link>
+          </Button>
         </Card>
       </section>
     </div>

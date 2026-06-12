@@ -4,6 +4,7 @@ import Masonry, { ResponsiveMasonry } from "react-responsive-masonry";
 import { Card } from "../components/ui/card";
 import { Button } from "../components/ui/button";
 import { motion } from "motion/react";
+import { Link } from "react-router";
 
 interface GalleryImage {
   id: string;
@@ -78,7 +79,9 @@ export default function Gallery() {
                 <p className="font-sans text-muted-foreground mb-6">
                   Start creating beautiful embroidery art from your photos
                 </p>
-                <Button>Create Your First Embroidery</Button>
+                <Button asChild>
+                  <Link to="/create">Create Your First Embroidery</Link>
+                </Button>
               </div>
             </Card>
           ) : (
@@ -108,8 +111,10 @@ export default function Gallery() {
                             {new Date(image.createdAt).toLocaleDateString()}
                           </p>
                           <div className="flex gap-2">
-                            <Button size="icon" variant="secondary" className="rounded-full h-10 w-10">
-                              <Download className="w-4 h-4" />
+                            <Button size="icon" variant="secondary" className="rounded-full h-10 w-10" asChild>
+                              <a href={image.url} download target="_blank" rel="noopener noreferrer" title="Download image">
+                                <Download className="w-4 h-4" />
+                              </a>
                             </Button>
                             <Button
                               size="icon"
@@ -154,8 +159,10 @@ export default function Gallery() {
                                     {new Date(image.createdAt).toLocaleDateString()}
                                   </p>
                                   <div className="flex gap-2">
-                                    <Button size="icon" variant="secondary" className="rounded-full h-9 w-9">
-                                      <Download className="w-4 h-4" />
+                                    <Button size="icon" variant="secondary" className="rounded-full h-9 w-9" asChild>
+                                      <a href={image.url} download target="_blank" rel="noopener noreferrer" title="Download image">
+                                        <Download className="w-4 h-4" />
+                                      </a>
                                     </Button>
                                     <Button
                                       size="icon"

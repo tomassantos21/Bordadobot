@@ -4,6 +4,7 @@ import { Button } from "../components/ui/button";
 import { Textarea } from "../components/ui/textarea";
 import { Card } from "../components/ui/card";
 import { motion } from "motion/react";
+import { toast } from "sonner";
 
 export default function Create() {
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
@@ -28,11 +29,58 @@ export default function Create() {
 
     setIsProcessing(true);
 
-    // Mock processing - in production this would call Supabase edge function
-    setTimeout(() => {
+    try {
+      // Mock processing - in production this would call Supabase edge function
+      await new Promise((resolve) => setTimeout(resolve, 2000));
       setResultImage(selectedImage); // Placeholder result
+      toast.success("Embroidery pattern generated!");
+    } catch (err) {
+      toast.error("Failed to generate embroidery pattern.");
+    } finally {
       setIsProcessing(false);
-    }, 2000);
+    }
+  };
+
+  const handleDownload = () => {
+    if (!resultImage) return;
+    try {
+      const link = document.createElement("a");
+      link.href = resultImage;
+      link.download = "embroidery-artwork.png";
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      toast.success("Artwork downloaded successfully!");
+    } catch (err) {
+      toast.error("Failed to download artwork.");
+    }
+  };
+
+  const handleShare = async () => {
+    if (!resultImage) return;
+    const shareData = {
+      title: "My Embroidery Artwork",
+      text: "Check out this beautiful Castelo Branco style embroidery I created with BordadoBot!",
+      url: window.location.href,
+    };
+
+    if (navigator.share && navigator.canShare && navigator.canShare(shareData)) {
+      try {
+        await navigator.share(shareData);
+        toast.success("Shared successfully!");
+      } catch (err) {
+        if ((err as Error).name !== "AbortError") {
+          toast.error("Failed to share.");
+        }
+      }
+    } else {
+      try {
+        await navigator.clipboard.writeText(window.location.href);
+        toast.success("Link copied to clipboard!");
+      } catch (err) {
+        toast.error("Failed to copy link.");
+      }
+    }
   };
 
   const handleReset = () => {
@@ -159,7 +207,24 @@ export default function Create() {
                 <h2 className="mb-6">Embroidery Result</h2>
 
                 <div className="flex items-center justify-center border-2 border-primary/30 rounded-2xl min-h-[400px] bg-accent/10">
-                  {resultImage ? (
+                  {isProcessing ? (
+                    <div className="text-center px-4">
+                      <motion.div
+                        animate={{ rotate: 360 }}
+                        transition={{
+                          duration: 1.5,
+                          repeat: Infinity,
+                          ease: "linear",
+                        }}
+                        className="w-20 h-20 bg-accent rounded-full flex items-center justify-center mx-auto mb-6"
+                      >
+                        <Sparkles className="w-10 h-10 text-primary" />
+                      </motion.div>
+                      <p className="font-secondary text-muted-foreground italic animate-pulse">
+                        Generating embroidery pattern...
+                      </p>
+                    </div>
+                  ) : resultImage ? (
                     <motion.div
                       initial={{ scale: 0.9, opacity: 0 }}
                       animate={{ scale: 1, opacity: 1 }}
@@ -186,11 +251,11 @@ export default function Create() {
 
                 {resultImage && (
                   <div className="flex gap-3 mt-6">
-                    <Button className="flex-1 gap-2" size="lg">
+                    <Button className="flex-1 gap-2" size="lg" onClick={handleDownload}>
                       <Download className="w-5 h-5" />
                       Download
                     </Button>
-                    <Button variant="outline" className="flex-1 gap-2" size="lg">
+                    <Button variant="outline" className="flex-1 gap-2" size="lg" onClick={handleShare}>
                       <Share2 className="w-5 h-5" />
                       Share
                     </Button>

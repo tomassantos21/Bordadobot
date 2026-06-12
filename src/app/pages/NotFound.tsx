@@ -13,12 +13,12 @@ export default function NotFound() {
         <p className="font-secondary text-xl text-muted-foreground mb-8 italic">
           The page you're looking for doesn't exist or has been moved.
         </p>
-        <Link to="/">
-          <Button className="gap-2">
+        <Button className="gap-2" asChild>
+          <Link to="/">
             <Home className="w-5 h-5" />
             Back to Home
-          </Button>
-        </Link>
+          </Link>
+        </Button>
       </div>
     </div>
   );
