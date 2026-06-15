@@ -14,47 +14,59 @@ interface GalleryImage {
 }
 
 export default function Gallery() {
-  const [images, setImages] = useState<GalleryImage[]>([
-    {
-      id: "1",
-      url: "https://images.unsplash.com/photo-1452457807411-4979b707c5be?w=800&h=600&fit=crop",
-      title: "Mountain Landscape Embroidery",
-      createdAt: "2026-04-05",
-    },
-    {
-      id: "2",
-      url: "https://images.unsplash.com/photo-1441974231531-c6227db76b6e?w=800&h=1000&fit=crop",
-      title: "Forest Path Embroidery",
-      createdAt: "2026-04-04",
-    },
-    {
-      id: "3",
-      url: "https://images.unsplash.com/photo-1470071459604-3b5ec3a7fe05?w=800&h=500&fit=crop",
-      title: "Sunset Vista Embroidery",
-      createdAt: "2026-04-03",
-    },
-    {
-      id: "4",
-      url: "https://images.unsplash.com/photo-1426604966848-d7adac402bff?w=800&h=900&fit=crop",
-      title: "Alpine Meadow Embroidery",
-      createdAt: "2026-04-02",
-    },
-    {
-      id: "5",
-      url: "https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=800&h=600&fit=crop",
-      title: "Mountain Peak Embroidery",
-      createdAt: "2026-04-01",
-    },
-    {
-      id: "6",
-      url: "https://images.unsplash.com/photo-1469474968028-56623f02e42e?w=800&h=800&fit=crop",
-      title: "Lake Reflection Embroidery",
-      createdAt: "2026-03-31",
-    },
-  ]);
+  const [images, setImages] = useState<GalleryImage[]>(() => {
+    const saved = localStorage.getItem("bordadobot_gallery");
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch (e) {
+        console.error("Failed to parse gallery from localStorage", e);
+      }
+    }
+    return [
+      {
+        id: "1",
+        url: "https://images.unsplash.com/photo-1452457807411-4979b707c5be?w=800&h=600&fit=crop",
+        title: "Mountain Landscape Embroidery",
+        createdAt: "2026-04-05",
+      },
+      {
+        id: "2",
+        url: "https://images.unsplash.com/photo-1441974231531-c6227db76b6e?w=800&h=1000&fit=crop",
+        title: "Forest Path Embroidery",
+        createdAt: "2026-04-04",
+      },
+      {
+        id: "3",
+        url: "https://images.unsplash.com/photo-1470071459604-3b5ec3a7fe05?w=800&h=500&fit=crop",
+        title: "Sunset Vista Embroidery",
+        createdAt: "2026-04-03",
+      },
+      {
+        id: "4",
+        url: "https://images.unsplash.com/photo-1426604966848-d7adac402bff?w=800&h=900&fit=crop",
+        title: "Alpine Meadow Embroidery",
+        createdAt: "2026-04-02",
+      },
+      {
+        id: "5",
+        url: "https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=800&h=600&fit=crop",
+        title: "Mountain Peak Embroidery",
+        createdAt: "2026-04-01",
+      },
+      {
+        id: "6",
+        url: "https://images.unsplash.com/photo-1469474968028-56623f02e42e?w=800&h=800&fit=crop",
+        title: "Lake Reflection Embroidery",
+        createdAt: "2026-03-31",
+      },
+    ];
+  });
 
   const handleDelete = (id: string) => {
-    setImages(images.filter((img) => img.id !== id));
+    const updated = images.filter((img) => img.id !== id);
+    setImages(updated);
+    localStorage.setItem("bordadobot_gallery", JSON.stringify(updated));
   };
 
   return (

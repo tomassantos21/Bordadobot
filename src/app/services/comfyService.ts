@@ -15,12 +15,25 @@ export function dataURLtoBlob(dataurl: string): Blob {
 }
 
 /**
+ * Helper to get the correct API base URL.
+ * If serverUrl is relative (e.g. /api/comfy), resolves it against window.location.origin.
+ */
+function getApiUrl(serverUrl: string): string {
+  const cleanUrl = serverUrl.replace(/\/$/, "");
+  if (cleanUrl.startsWith("http://") || cleanUrl.startsWith("https://")) {
+    return cleanUrl;
+  }
+  // Fallback / support relative proxy path
+  return `${window.location.origin}${cleanUrl}`;
+}
+
+/**
  * Checks if the ComfyUI server is reachable.
  */
 export async function checkComfyConnection(serverUrl: string): Promise<boolean> {
   try {
-    const cleanUrl = serverUrl.replace(/\/$/, "");
-    const response = await fetch(`${cleanUrl}/system_stats`, {
+    const baseUrl = getApiUrl(serverUrl);
+    const response = await fetch(`${baseUrl}/system_stats`, {
       method: "GET",
       // Short timeout to avoid hanging UI
       signal: AbortSignal.timeout(3000),
@@ -38,11 +51,11 @@ export async function fetchComfyModels(serverUrl: string): Promise<{
   checkpoints: string[];
   loras: string[];
 }> {
-  const cleanUrl = serverUrl.replace(/\/$/, "");
+  const baseUrl = getApiUrl(serverUrl);
   const results = { checkpoints: [] as string[], loras: [] as string[] };
 
   try {
-    const ckptRes = await fetch(`${cleanUrl}/object_info/CheckpointLoaderSimple`, {
+    const ckptRes = await fetch(`${baseUrl}/object_info/CheckpointLoaderSimple`, {
       signal: AbortSignal.timeout(3000),
     });
     if (ckptRes.ok) {
@@ -54,7 +67,7 @@ export async function fetchComfyModels(serverUrl: string): Promise<{
   }
 
   try {
-    const loraRes = await fetch(`${cleanUrl}/object_info/LoraLoader`, {
+    const loraRes = await fetch(`${baseUrl}/object_info/LoraLoader`, {
       signal: AbortSignal.timeout(3000),
     });
     if (loraRes.ok) {
@@ -76,13 +89,13 @@ export async function uploadImageToComfy(
   serverUrl: string,
   base64Image: string
 ): Promise<string> {
-  const cleanUrl = serverUrl.replace(/\/$/, "");
+  const baseUrl = getApiUrl(serverUrl);
   const blob = dataURLtoBlob(base64Image);
   const formData = new FormData();
   formData.append("image", blob, "bordadobot_input.png");
   formData.append("overwrite", "true");
 
-  const response = await fetch(`${cleanUrl}/upload/image`, {
+  const response = await fetch(`${baseUrl}/upload/image`, {
     method: "POST",
     body: formData,
   });
@@ -104,8 +117,8 @@ export async function submitComfyPrompt(
   clientId: string,
   promptWorkflow: Record<string, any>
 ): Promise<string> {
-  const cleanUrl = serverUrl.replace(/\/$/, "");
-  const response = await fetch(`${cleanUrl}/prompt`, {
+  const baseUrl = getApiUrl(serverUrl);
+  const response = await fetch(`${baseUrl}/prompt`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -153,7 +166,15 @@ export function monitorComfyProgress(
 ): Promise<string> {
   return new Promise((resolve, reject) => {
     const cleanUrl = serverUrl.replace(/\/$/, "");
-    const wsUrl = cleanUrl.replace(/^http/, "ws") + `/ws?clientId=${clientId}`;
+    const baseUrl = getApiUrl(serverUrl);
+    
+    let wsUrl: string;
+    if (cleanUrl.startsWith("http://") || cleanUrl.startsWith("https://")) {
+      wsUrl = cleanUrl.replace(/^http/, "ws") + `/ws?clientId=${clientId}`;
+    } else {
+      const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+      wsUrl = `${protocol}//${window.location.host}${cleanUrl}/ws?clientId=${clientId}`;
+    }
     
     let ws: WebSocket;
     try {
@@ -226,7 +247,7 @@ export function monitorComfyProgress(
             ws.close();
 
             const img = output.images[0];
-            const finalImageUrl = `${cleanUrl}/view?filename=${encodeURIComponent(img.filename)}&subfolder=${encodeURIComponent(img.subfolder)}&type=${encodeURIComponent(img.type)}`;
+            const finalImageUrl = `${baseUrl}/view?filename=${encodeURIComponent(img.filename)}&subfolder=${encodeURIComponent(img.subfolder)}&type=${encodeURIComponent(img.type)}`;
             
             onProgress({
               status: "done",
@@ -240,6 +261,52 @@ export function monitorComfyProgress(
       } catch (e) {
         console.error("Error parsing WebSocket message:", e);
       }
+    };
+  });
+}
+
+/**
+ * Resizes a base64 image data URL so that its longest side is at most maxDimension.
+ * Maintains the aspect ratio of the original image.
+ */
+export function resizeImage(base64Str: string, maxDimension = 1024): Promise<string> {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.src = base64Str;
+    img.onload = () => {
+      let width = img.width;
+      let height = img.height;
+
+      if (width <= maxDimension && height <= maxDimension) {
+        resolve(base64Str);
+        return;
+      }
+
+      if (width > height) {
+        if (width > maxDimension) {
+          height = Math.round((height * maxDimension) / width);
+          width = maxDimension;
+        }
+      } else {
+        if (height > maxDimension) {
+          width = Math.round((width * maxDimension) / height);
+          height = maxDimension;
+        }
+      }
+
+      const canvas = document.createElement("canvas");
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext("2d");
+      if (ctx) {
+        ctx.drawImage(img, 0, 0, width, height);
+        resolve(canvas.toDataURL("image/png"));
+      } else {
+        resolve(base64Str);
+      }
+    };
+    img.onerror = () => {
+      resolve(base64Str);
     };
   });
 }
