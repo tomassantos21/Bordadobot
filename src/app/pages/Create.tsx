@@ -1,16 +1,115 @@
-import { useState } from "react";
-import { Upload, Sparkles, Download, Share2, X } from "lucide-react";
+import { useState, useEffect } from "react";
+import { Upload, Sparkles, Download, Share2, X, RefreshCw, Settings } from "lucide-react";
 import { Button } from "../components/ui/button";
 import { Textarea } from "../components/ui/textarea";
 import { Card } from "../components/ui/card";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "../components/ui/tabs";
+import { Slider } from "../components/ui/slider";
+import { Label } from "../components/ui/label";
+import { Input } from "../components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui/select";
+import { Progress } from "../components/ui/progress";
 import { motion } from "motion/react";
 import { toast } from "sonner";
+import {
+  checkComfyConnection,
+  fetchComfyModels,
+  uploadImageToComfy,
+  submitComfyPrompt,
+  monitorComfyProgress,
+  type ComfyProgress,
+} from "../services/comfyService";
+import comfyWorkflowTemplate from "../../../workflows/comfy_style_transfer_api.json";
 
 export default function Create() {
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
   const [description, setDescription] = useState("");
   const [isProcessing, setIsProcessing] = useState(false);
   const [resultImage, setResultImage] = useState<string | null>(null);
+
+  // ComfyUI-specific states
+  const [useComfyUI, setUseComfyUI] = useState<boolean>(() => {
+    return localStorage.getItem("comfy_use") === "true";
+  });
+  const [comfyUrl, setComfyUrl] = useState<string>(() => {
+    return localStorage.getItem("comfy_url") || "http://127.0.0.1:8188";
+  });
+  const [baseCheckpoint, setBaseCheckpoint] = useState<string>(() => {
+    return localStorage.getItem("comfy_base_checkpoint") || "sd_xl_base_1.0.safetensors";
+  });
+  const [loraModel, setLoraModel] = useState<string>(() => {
+    return localStorage.getItem("comfy_lora_model") || "embroidery_sdxl_lora.safetensors";
+  });
+  const [loraStrength, setLoraStrength] = useState<number>(() => {
+    const saved = localStorage.getItem("comfy_lora_strength");
+    return saved !== null ? parseFloat(saved) : 1.0;
+  });
+  const [positivePrompt, setPositivePrompt] = useState<string>(() => {
+    return localStorage.getItem("comfy_positive_prompt") || "embroidery style, castelo branco style embroidery, embroidery pattern, detailed stitching, colorful thread, fabric texture";
+  });
+  const [negativePrompt, setNegativePrompt] = useState<string>(() => {
+    return localStorage.getItem("comfy_negative_prompt") || "blurry, low quality, photorealistic, photo, 3d render, frame, background fabric, out of focus, duplicate, watermark, signature";
+  });
+  const [denoise, setDenoise] = useState<number>(() => {
+    const saved = localStorage.getItem("comfy_denoise");
+    return saved !== null ? parseFloat(saved) : 0.55;
+  });
+  const [cfg, setCfg] = useState<number>(() => {
+    const saved = localStorage.getItem("comfy_cfg");
+    return saved !== null ? parseFloat(saved) : 7.0;
+  });
+  const [steps, setSteps] = useState<number>(() => {
+    const saved = localStorage.getItem("comfy_steps");
+    return saved !== null ? parseInt(saved, 10) : 20;
+  });
+
+  const [connectionStatus, setConnectionStatus] = useState<"checking" | "connected" | "disconnected">("disconnected");
+  const [availableCheckpoints, setAvailableCheckpoints] = useState<string[]>([]);
+  const [availableLoras, setAvailableLoras] = useState<string[]>([]);
+  const [comfyProgress, setComfyProgress] = useState<ComfyProgress | null>(null);
+
+  // Sync to localStorage
+  useEffect(() => {
+    localStorage.setItem("comfy_use", String(useComfyUI));
+    localStorage.setItem("comfy_url", comfyUrl);
+    localStorage.setItem("comfy_base_checkpoint", baseCheckpoint);
+    localStorage.setItem("comfy_lora_model", loraModel);
+    localStorage.setItem("comfy_lora_strength", String(loraStrength));
+    localStorage.setItem("comfy_positive_prompt", positivePrompt);
+    localStorage.setItem("comfy_negative_prompt", negativePrompt);
+    localStorage.setItem("comfy_denoise", String(denoise));
+    localStorage.setItem("comfy_cfg", String(cfg));
+    localStorage.setItem("comfy_steps", String(steps));
+  }, [useComfyUI, comfyUrl, baseCheckpoint, loraModel, loraStrength, positivePrompt, negativePrompt, denoise, cfg, steps]);
+
+  const checkConnection = async () => {
+    setConnectionStatus("checking");
+    const connected = await checkComfyConnection(comfyUrl);
+    if (connected) {
+      setConnectionStatus("connected");
+      const models = await fetchComfyModels(comfyUrl);
+      setAvailableCheckpoints(models.checkpoints);
+      setAvailableLoras(models.loras);
+      
+      // Auto-select defaults from server if ours are not there
+      if (models.checkpoints.length > 0 && !models.checkpoints.includes(baseCheckpoint)) {
+        const match = models.checkpoints.find(c => c.toLowerCase().includes("sd_xl") || c.toLowerCase().includes("sdxl"));
+        setBaseCheckpoint(match || models.checkpoints[0]);
+      }
+      if (models.loras.length > 0 && !models.loras.includes(loraModel)) {
+        const match = models.loras.find(l => l.toLowerCase().includes("embroidery") || l.toLowerCase().includes("lora"));
+        setLoraModel(match || models.loras[0]);
+      }
+    } else {
+      setConnectionStatus("disconnected");
+    }
+  };
+
+  useEffect(() => {
+    if (useComfyUI) {
+      checkConnection();
+    }
+  }, [useComfyUI, comfyUrl]);
 
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -19,6 +118,7 @@ export default function Create() {
       reader.onload = (event) => {
         setSelectedImage(event.target?.result as string);
         setResultImage(null);
+        setComfyProgress(null);
       };
       reader.readAsDataURL(file);
     }
@@ -29,15 +129,79 @@ export default function Create() {
 
     setIsProcessing(true);
 
-    try {
-      // Mock processing - in production this would call Supabase edge function
-      await new Promise((resolve) => setTimeout(resolve, 2000));
-      setResultImage(selectedImage); // Placeholder result
-      toast.success("Embroidery pattern generated!");
-    } catch (err) {
-      toast.error("Failed to generate embroidery pattern.");
-    } finally {
-      setIsProcessing(false);
+    if (useComfyUI) {
+      try {
+        setComfyProgress({
+          status: "connecting",
+          message: "Checking connection to local ComfyUI...",
+        });
+
+        const connected = await checkComfyConnection(comfyUrl);
+        if (!connected) {
+          throw new Error("Unable to connect to ComfyUI. Please ensure ComfyUI is running locally.");
+        }
+
+        const clientId = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+
+        setComfyProgress({
+          status: "uploading",
+          message: "Uploading source image...",
+        });
+        const comfyImageName = await uploadImageToComfy(comfyUrl, selectedImage);
+
+        // Prepare prompt payload
+        const workflow = JSON.parse(JSON.stringify(comfyWorkflowTemplate));
+        workflow["3"].inputs.ckpt_name = baseCheckpoint;
+        workflow["2"].inputs.lora_name = loraModel;
+        workflow["2"].inputs.strength_model = loraStrength;
+        workflow["2"].inputs.strength_clip = loraStrength;
+
+        const fullPositivePrompt = description.trim()
+          ? `${positivePrompt}, ${description.trim()}`
+          : positivePrompt;
+        workflow["4"].inputs.text = fullPositivePrompt;
+        workflow["5"].inputs.text = negativePrompt;
+        workflow["10"].inputs.image = comfyImageName;
+
+        workflow["12"].inputs.denoise = denoise;
+        workflow["12"].inputs.cfg = cfg;
+        workflow["12"].inputs.steps = steps;
+        workflow["12"].inputs.seed = Math.floor(Math.random() * 1000000000000000);
+
+        setComfyProgress({
+          status: "queueing",
+          message: "Submitting generation prompt...",
+        });
+        const promptId = await submitComfyPrompt(comfyUrl, clientId, workflow);
+
+        const finalUrl = await monitorComfyProgress(comfyUrl, clientId, promptId, (progress) => {
+          setComfyProgress(progress);
+        });
+
+        setResultImage(finalUrl);
+        toast.success("Embroidery pattern generated!");
+      } catch (err) {
+        console.error(err);
+        setComfyProgress({
+          status: "error",
+          message: (err as Error).message || "Generation failed",
+        });
+        toast.error((err as Error).message || "Failed to generate embroidery pattern.");
+      } finally {
+        setIsProcessing(false);
+      }
+    } else {
+      // Mock processing
+      setComfyProgress(null);
+      try {
+        await new Promise((resolve) => setTimeout(resolve, 2000));
+        setResultImage(selectedImage);
+        toast.success("Embroidery pattern generated!");
+      } catch (err) {
+        toast.error("Failed to generate embroidery pattern.");
+      } finally {
+        setIsProcessing(false);
+      }
     }
   };
 
@@ -87,6 +251,7 @@ export default function Create() {
     setSelectedImage(null);
     setDescription("");
     setResultImage(null);
+    setComfyProgress(null);
   };
 
   return (
@@ -152,18 +317,248 @@ export default function Create() {
                       />
                     </div>
 
-                    <div>
-                      <label className="block mb-2 font-sans">
-                        Description (optional)
-                      </label>
-                      <Textarea
-                        placeholder="Add context to help the AI understand your image..."
-                        value={description}
-                        onChange={(e) => setDescription(e.target.value)}
-                        className="resize-none"
-                        rows={4}
-                      />
+                    {/* Mode Selector */}
+                    <div className="bg-muted/30 p-1 rounded-lg flex items-center gap-2 border border-primary/10">
+                      <Button
+                        variant={useComfyUI ? "ghost" : "secondary"}
+                        size="sm"
+                        className="flex-1 text-sm font-sans"
+                        onClick={() => setUseComfyUI(false)}
+                      >
+                        Demo Mode
+                      </Button>
+                      <Button
+                        variant={useComfyUI ? "secondary" : "ghost"}
+                        size="sm"
+                        className="flex-1 text-sm font-sans gap-2"
+                        onClick={() => setUseComfyUI(true)}
+                      >
+                        <Settings className="w-4 h-4" />
+                        ComfyUI Local
+                      </Button>
                     </div>
+
+                    {!useComfyUI ? (
+                      <div>
+                        <label className="block mb-2 font-sans text-sm font-medium">
+                          Description (optional)
+                        </label>
+                        <Textarea
+                          placeholder="Add context to help the AI understand your image..."
+                          value={description}
+                          onChange={(e) => setDescription(e.target.value)}
+                          className="resize-none"
+                          rows={4}
+                        />
+                      </div>
+                    ) : (
+                      <Tabs defaultValue="basic" className="w-full">
+                        <TabsList className="grid w-full grid-cols-2 bg-muted/40">
+                          <TabsTrigger value="basic" className="text-xs">Basic Settings</TabsTrigger>
+                          <TabsTrigger value="prompt" className="text-xs">Style Details</TabsTrigger>
+                        </TabsList>
+
+                        <TabsContent value="basic" className="space-y-4 pt-4">
+                          {/* Connection Badge */}
+                          <div className="flex items-center justify-between bg-muted/20 p-3 rounded-lg border border-primary/10">
+                            <div className="flex items-center gap-2">
+                              <span className={`w-2.5 h-2.5 rounded-full ${
+                                connectionStatus === "connected" ? "bg-green-500 shadow-[0_0_8px_#22c55e]" :
+                                connectionStatus === "checking" ? "bg-amber-500 animate-pulse" : "bg-red-500"
+                              }`} />
+                              <span className="text-xs font-sans font-medium text-foreground">
+                                {connectionStatus === "connected" ? "ComfyUI Connected" :
+                                 connectionStatus === "checking" ? "Connecting to ComfyUI..." : "ComfyUI Disconnected"}
+                              </span>
+                            </div>
+                            <Button 
+                              variant="outline" 
+                              size="sm" 
+                              onClick={checkConnection} 
+                              className="h-8 text-xs font-sans px-3 gap-1 hover:bg-accent/40"
+                              disabled={connectionStatus === "checking"}
+                            >
+                              <RefreshCw className={`w-3.5 h-3.5 ${connectionStatus === "checking" ? "animate-spin" : ""}`} />
+                              Test
+                            </Button>
+                          </div>
+
+                          {/* Server URL */}
+                          <div className="space-y-1.5">
+                            <Label htmlFor="comfy-url" className="text-xs font-semibold">ComfyUI Server Address</Label>
+                            <Input
+                              id="comfy-url"
+                              value={comfyUrl}
+                              onChange={(e) => setComfyUrl(e.target.value)}
+                              placeholder="http://127.0.0.1:8188"
+                              className="h-9 text-xs"
+                            />
+                          </div>
+
+                          {/* Checkpoint Selection */}
+                          <div className="space-y-1.5">
+                            <Label htmlFor="base-checkpoint" className="text-xs font-semibold">Base Checkpoint (SDXL)</Label>
+                            {availableCheckpoints.length > 0 ? (
+                              <Select value={baseCheckpoint} onValueChange={setBaseCheckpoint}>
+                                <SelectTrigger className="h-9 text-xs">
+                                  <SelectValue placeholder="Select checkpoint" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {availableCheckpoints.map((ckpt) => (
+                                    <SelectItem key={ckpt} value={ckpt} className="text-xs">
+                                      {ckpt}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            ) : (
+                              <Input
+                                id="base-checkpoint"
+                                value={baseCheckpoint}
+                                onChange={(e) => setBaseCheckpoint(e.target.value)}
+                                placeholder="sd_xl_base_1.0.safetensors"
+                                className="h-9 text-xs"
+                              />
+                            )}
+                          </div>
+
+                          {/* LoRA Model */}
+                          <div className="space-y-1.5">
+                            <Label htmlFor="lora-model" className="text-xs font-semibold">LoRA Model</Label>
+                            {availableLoras.length > 0 ? (
+                              <Select value={loraModel} onValueChange={setLoraModel}>
+                                <SelectTrigger className="h-9 text-xs">
+                                  <SelectValue placeholder="Select LoRA model" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {availableLoras.map((lor) => (
+                                    <SelectItem key={lor} value={lor} className="text-xs">
+                                      {lor}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            ) : (
+                              <Input
+                                id="lora-model"
+                                value={loraModel}
+                                onChange={(e) => setLoraModel(e.target.value)}
+                                placeholder="embroidery_sdxl_lora.safetensors"
+                                className="h-9 text-xs"
+                              />
+                            )}
+                          </div>
+
+                          {/* LoRA Strength Slider */}
+                          <div className="space-y-2">
+                            <div className="flex justify-between items-center text-xs font-semibold">
+                              <Label>LoRA Strength</Label>
+                              <span className="text-muted-foreground font-mono bg-muted px-1.5 py-0.5 rounded">{loraStrength.toFixed(2)}</span>
+                            </div>
+                            <Slider
+                              value={[loraStrength]}
+                              onValueChange={(vals) => setLoraStrength(vals[0])}
+                              min={0.0}
+                              max={2.0}
+                              step={0.05}
+                              className="py-2"
+                            />
+                          </div>
+
+                          {/* Denoising Slider */}
+                          <div className="space-y-2">
+                            <div className="flex justify-between items-center text-xs font-semibold">
+                              <Label>Denoising Strength (Style vs Structure)</Label>
+                              <span className="text-muted-foreground font-mono bg-muted px-1.5 py-0.5 rounded">{denoise.toFixed(2)}</span>
+                            </div>
+                            <Slider
+                              value={[denoise]}
+                              onValueChange={(vals) => setDenoise(vals[0])}
+                              min={0.1}
+                              max={1.0}
+                              step={0.05}
+                              className="py-2"
+                            />
+                            <p className="text-[10px] text-muted-foreground leading-normal font-sans">
+                              Lower = keeps original layout shapes. Higher = transforms structure more toward embroidery style.
+                            </p>
+                          </div>
+                        </TabsContent>
+
+                        <TabsContent value="prompt" className="space-y-4 pt-4">
+                          {/* Description Input */}
+                          <div className="space-y-1.5">
+                            <Label htmlFor="create-desc" className="text-xs font-semibold">Description (Dynamic Prompt Context)</Label>
+                            <Textarea
+                              id="create-desc"
+                              placeholder="Describe your uploaded image contents (e.g. 'a blue flower with yellow center')..."
+                              value={description}
+                              onChange={(e) => setDescription(e.target.value)}
+                              className="resize-none text-xs"
+                              rows={2}
+                            />
+                          </div>
+
+                          {/* Positive Prompt */}
+                          <div className="space-y-1.5">
+                            <Label htmlFor="positive-prompt" className="text-xs font-semibold">Base Positive Prompt (Embroidery Style)</Label>
+                            <Textarea
+                              id="positive-prompt"
+                              value={positivePrompt}
+                              onChange={(e) => setPositivePrompt(e.target.value)}
+                              placeholder="embroidery style..."
+                              className="resize-none text-xs"
+                              rows={3}
+                            />
+                          </div>
+
+                          {/* Negative Prompt */}
+                          <div className="space-y-1.5">
+                            <Label htmlFor="negative-prompt" className="text-xs font-semibold">Negative Prompt</Label>
+                            <Textarea
+                              id="negative-prompt"
+                              value={negativePrompt}
+                              onChange={(e) => setNegativePrompt(e.target.value)}
+                              placeholder="blurry, low quality..."
+                              className="resize-none text-xs"
+                              rows={2}
+                            />
+                          </div>
+
+                          {/* Steps and CFG */}
+                          <div className="grid grid-cols-2 gap-4">
+                            <div className="space-y-2">
+                              <div className="flex justify-between items-center text-xs font-semibold">
+                                <Label>Steps</Label>
+                                <span className="text-muted-foreground font-mono bg-muted px-1.5 rounded">{steps}</span>
+                              </div>
+                              <Slider
+                                value={[steps]}
+                                onValueChange={(vals) => setSteps(vals[0])}
+                                min={10}
+                                max={50}
+                                step={1}
+                                className="py-2"
+                              />
+                            </div>
+                            <div className="space-y-2">
+                              <div className="flex justify-between items-center text-xs font-semibold">
+                                <Label>CFG Scale</Label>
+                                <span className="text-muted-foreground font-mono bg-muted px-1.5 rounded">{cfg.toFixed(1)}</span>
+                              </div>
+                              <Slider
+                                value={[cfg]}
+                                onValueChange={(vals) => setCfg(vals[0])}
+                                min={1.0}
+                                max={15.0}
+                                step={0.5}
+                                className="py-2"
+                              />
+                            </div>
+                          </div>
+                        </TabsContent>
+                      </Tabs>
+                    )}
 
                     <Button
                       onClick={handleTransform}
@@ -208,21 +603,71 @@ export default function Create() {
 
                 <div className="flex items-center justify-center border-2 border-primary/30 rounded-2xl min-h-[400px] bg-accent/10">
                   {isProcessing ? (
-                    <div className="text-center px-4">
-                      <motion.div
-                        animate={{ rotate: 360 }}
-                        transition={{
-                          duration: 1.5,
-                          repeat: Infinity,
-                          ease: "linear",
-                        }}
-                        className="w-20 h-20 bg-accent rounded-full flex items-center justify-center mx-auto mb-6"
-                      >
-                        <Sparkles className="w-10 h-10 text-primary" />
-                      </motion.div>
-                      <p className="font-secondary text-muted-foreground italic animate-pulse">
-                        Generating embroidery pattern...
-                      </p>
+                    <div className="text-center px-6 w-full max-w-md">
+                      {useComfyUI && comfyProgress ? (
+                        <div className="space-y-6">
+                          <motion.div
+                            animate={{ rotate: comfyProgress.status === "running" ? 360 : 0 }}
+                            transition={{
+                              duration: 2,
+                              repeat: Infinity,
+                              ease: "linear",
+                            }}
+                            className="w-20 h-20 bg-accent rounded-full flex items-center justify-center mx-auto"
+                          >
+                            <Sparkles className="w-10 h-10 text-primary" />
+                          </motion.div>
+
+                          <div className="space-y-2">
+                            <p className="font-sans font-semibold text-foreground capitalize">
+                              {comfyProgress.status === "running" ? "Generating Pattern" : comfyProgress.status}
+                            </p>
+                            <p className="font-secondary text-muted-foreground text-sm italic">
+                              {comfyProgress.message}
+                            </p>
+                          </div>
+
+                          {comfyProgress.status === "running" && comfyProgress.step !== undefined && comfyProgress.maxSteps !== undefined && (
+                            <div className="space-y-2">
+                              <Progress
+                                value={(comfyProgress.step / comfyProgress.maxSteps) * 100}
+                                className="h-2 w-full"
+                              />
+                              <div className="flex justify-between text-xs text-muted-foreground font-sans">
+                                <span>Step {comfyProgress.step} of {comfyProgress.maxSteps}</span>
+                                <span>{Math.round((comfyProgress.step / comfyProgress.maxSteps) * 100)}%</span>
+                              </div>
+                            </div>
+                          )}
+
+                          {comfyProgress.status !== "running" && comfyProgress.status !== "done" && comfyProgress.status !== "error" && (
+                            <div className="w-full bg-muted/30 rounded-full h-1.5 overflow-hidden relative">
+                              <motion.div
+                                className="bg-primary h-full rounded-full w-1/3"
+                                animate={{ x: ["-100%", "300%"] }}
+                                transition={{ repeat: Infinity, duration: 1.5, ease: "easeInOut" }}
+                              />
+                            </div>
+                          )}
+                        </div>
+                      ) : (
+                        <>
+                          <motion.div
+                            animate={{ rotate: 360 }}
+                            transition={{
+                              duration: 1.5,
+                              repeat: Infinity,
+                              ease: "linear",
+                            }}
+                            className="w-20 h-20 bg-accent rounded-full flex items-center justify-center mx-auto mb-6"
+                          >
+                            <Sparkles className="w-10 h-10 text-primary" />
+                          </motion.div>
+                          <p className="font-secondary text-muted-foreground italic animate-pulse">
+                            Generating embroidery pattern...
+                          </p>
+                        </>
+                      )}
                     </div>
                   ) : resultImage ? (
                     <motion.div
@@ -234,7 +679,7 @@ export default function Create() {
                       <img
                         src={resultImage}
                         alt="Embroidery result"
-                        className="w-full h-auto object-contain max-h-[400px] rounded-xl"
+                        className="w-full h-auto object-contain max-h-[400px] rounded-xl mx-auto"
                       />
                     </motion.div>
                   ) : (
@@ -274,9 +719,7 @@ export default function Create() {
             >
               <Card className="p-6 bg-muted/50 border-primary/10">
                 <p className="text-sm text-muted-foreground text-center font-sans">
-                  <strong>Note:</strong> Neural style transfer requires Supabase
-                  connection. Currently showing UI demonstration only. Connect
-                  Supabase in settings to enable AI transformation.
+                  <strong>Note:</strong> Neural style transfer can be run locally using ComfyUI. Switch the mode to ComfyUI Local above to configure your local models and parameters.
                 </p>
               </Card>
             </motion.div>
