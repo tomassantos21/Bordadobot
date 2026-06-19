@@ -197,7 +197,7 @@ export function monitorComfyProgress(
       });
     };
 
-    ws.onerror = (e) => {
+    ws.onerror = () => {
       clearTimeout(timeoutId);
       reject(new Error("WebSocket error. Connection lost."));
     };

@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Upload, Sparkles, Download, Share2, X, RefreshCw, Settings, ChevronDown } from "lucide-react";
+import { Upload, Sparkles, Download, X, RefreshCw, Settings, ChevronDown } from "lucide-react";
 import { Button } from "../components/ui/button";
 import { Textarea } from "../components/ui/textarea";
 import { Card } from "../components/ui/card";
@@ -92,7 +92,7 @@ export default function Create() {
       const models = await fetchComfyModels(comfyUrl);
       setAvailableCheckpoints(models.checkpoints);
       setAvailableLoras(models.loras);
-      
+
       // Auto-select defaults from server if ours are not there
       if (models.checkpoints.length > 0 && !models.checkpoints.includes(baseCheckpoint)) {
         const match = models.checkpoints.find(c => c.toLowerCase().includes("sd_xl") || c.toLowerCase().includes("sdxl"));
@@ -114,6 +114,40 @@ export default function Create() {
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
+      // Validate file type (only PNG and JPEG/JPG)
+      const allowedTypes = ["image/png", "image/jpeg"];
+      if (!allowedTypes.includes(file.type)) {
+        toast.error("Invalid file type", {
+          description: "Only .png and .jpeg files are accepted. Please select a compatible image.",
+          duration: 8000,
+          style: {
+            padding: "16px"
+          },
+          action: {
+            label: "Dismiss",
+            onClick: () => { },
+          },
+        });
+        return;
+      }
+
+      // Validate file size (10MB limit)
+      const maxSize = 10 * 1024 * 1024;
+      if (file.size > maxSize) {
+        toast.error("File is too large", {
+          description: `The file you selected is ${(file.size / (1024 * 1024)).toFixed(1)}MB. The maximum size allowed is 10MB.`,
+          duration: 10000,
+          style: {
+            padding: "16px"
+          },
+          action: {
+            label: "Dismiss",
+            onClick: () => { },
+          },
+        });
+        return;
+      }
+
       const reader = new FileReader();
       reader.onload = (event) => {
         setSelectedImage(event.target?.result as string);
@@ -220,33 +254,6 @@ export default function Create() {
       toast.success("Artwork downloaded successfully!");
     } catch (err) {
       toast.error("Failed to download artwork.");
-    }
-  };
-
-  const handleShare = async () => {
-    if (!resultImage) return;
-    const shareData = {
-      title: "My Embroidery Artwork",
-      text: "Check out this beautiful Castelo Branco style embroidery I created with BordadoBot!",
-      url: window.location.href,
-    };
-
-    if (navigator.share && navigator.canShare && navigator.canShare(shareData)) {
-      try {
-        await navigator.share(shareData);
-        toast.success("Shared successfully!");
-      } catch (err) {
-        if ((err as Error).name !== "AbortError") {
-          toast.error("Failed to share.");
-        }
-      }
-    } else {
-      try {
-        await navigator.clipboard.writeText(window.location.href);
-        toast.success("Link copied to clipboard!");
-      } catch (err) {
-        toast.error("Failed to copy link.");
-      }
     }
   };
 
@@ -375,19 +382,18 @@ export default function Create() {
                             {/* Connection Badge */}
                             <div className="flex items-center justify-between bg-muted/20 p-3 rounded-lg border border-primary/10">
                               <div className="flex items-center gap-2">
-                                <span className={`w-2.5 h-2.5 rounded-full ${
-                                  connectionStatus === "connected" ? "bg-green-500 shadow-[0_0_8px_#22c55e]" :
+                                <span className={`w-2.5 h-2.5 rounded-full ${connectionStatus === "connected" ? "bg-green-500 shadow-[0_0_8px_#22c55e]" :
                                   connectionStatus === "checking" ? "bg-amber-500 animate-pulse" : "bg-red-500"
-                                }`} />
+                                  }`} />
                                 <span className="text-xs font-sans font-medium text-foreground">
                                   {connectionStatus === "connected" ? "ComfyUI Connected" :
-                                   connectionStatus === "checking" ? "Connecting to ComfyUI..." : "ComfyUI Disconnected"}
+                                    connectionStatus === "checking" ? "Connecting to ComfyUI..." : "ComfyUI Disconnected"}
                                 </span>
                               </div>
-                              <Button 
-                                variant="outline" 
-                                size="sm" 
-                                onClick={checkConnection} 
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={checkConnection}
                                 className="h-8 text-xs font-sans px-3 gap-1 hover:bg-accent/40"
                                 disabled={connectionStatus === "checking"}
                               >
@@ -700,13 +706,9 @@ export default function Create() {
 
                 {resultImage && (
                   <div className="flex gap-3 mt-6">
-                    <Button className="flex-1 gap-2" size="lg" onClick={handleDownload}>
+                    <Button className="w-full gap-2" size="lg" onClick={handleDownload}>
                       <Download className="w-5 h-5" />
                       Download
-                    </Button>
-                    <Button variant="outline" className="flex-1 gap-2" size="lg" onClick={handleShare}>
-                      <Share2 className="w-5 h-5" />
-                      Share
                     </Button>
                   </div>
                 )}
