@@ -131,11 +131,11 @@ export default function Create() {
         return;
       }
 
-      // Validate file size (10MB limit)
-      const maxSize = 10 * 1024 * 1024;
+      // Validate file size (100MB limit)
+      const maxSize = 100 * 1024 * 1024;
       if (file.size > maxSize) {
         toast.error("File is too large", {
-          description: `The file you selected is ${(file.size / (1024 * 1024)).toFixed(1)}MB. The maximum size allowed is 10MB.`,
+          description: `The file you selected is ${(file.size / (1024 * 1024)).toFixed(1)}MB. The maximum size allowed is 100MB.`,
           duration: 10000,
           style: {
             padding: "16px"
